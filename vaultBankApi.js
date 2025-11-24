@@ -249,6 +249,7 @@ app.get('/api/v1/auth/me', authMiddleware, async (req, res) => {
     if (!user) return res.status(404).json({ message: 'User not found' });
     res.json(user);
   } catch (err) {
+    console.error('Registration error:', err); 
     res.status(500).json({ message: "Internal Server Error" });
   }
 });
