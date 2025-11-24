@@ -7,8 +7,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
 const PDFDocument = require('pdfkit');
-const path = require('path');
-const { type } = require('os');
+
 
 const app = express();
 const PORT = process.env.PORT || 3000;
