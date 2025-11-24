@@ -66,16 +66,15 @@ const authSchema = new mongoose.Schema({
 
 }, { timestamps: true });
 
-authSchema.pre("save", async function (next) {
-  if (!this.isModified("password")) return next();
+authSchema.pre("save", async function () { 
 
-  try {
-    const salt = await bcrypt.genSalt(10);
-    this.password = await bcrypt.hash(this.password, salt);
-    next(); 
-  } catch (err) {
-    throw err;
-  }
+    if (!this.isModified("password")) return; 
+    try {
+        const salt = await bcrypt.genSalt(10);
+        this.password = await bcrypt.hash(this.password, salt);
+    } catch (err) {
+        throw err;
+    }
 });
 
 authSchema.methods.comparePassword = async function(candidatePassword) {
@@ -90,12 +89,13 @@ const adminSchema = new mongoose.Schema({
   role:      { type: String, required: true, enum: ["admin"]}
 }, { timestamps: true });
 
-adminSchema.pre("save", async function (next) {
-  if (!this.isModified("password")) return next();
+adminSchema.pre("save", async function () { 
+
+
+  if (!this.isModified("password")) return; 
   try {
     const salt = await bcrypt.genSalt(10);
     this.password = await bcrypt.hash(this.password, salt);
-    next();
   } catch (err) {
     throw err;
   }
