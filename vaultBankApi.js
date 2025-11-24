@@ -66,14 +66,15 @@ const authSchema = new mongoose.Schema({
 
 }, { timestamps: true });
 
-authSchema.pre("save", async function(next) {
- if (!this.isModified("password")) return next();
+authSchema.pre("save", async function (next) {
+  if (!this.isModified("password")) return next();
+
   try {
-    const salt = await bcrypt.genSalt(10); 
-    this.password = await bcrypt.hash(this.password, salt); 
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
     next(); 
   } catch (err) {
-    next(err); 
+    throw err;
   }
 });
 
@@ -89,11 +90,15 @@ const adminSchema = new mongoose.Schema({
   role:      { type: String, required: true, enum: ["admin"]}
 }, { timestamps: true });
 
-adminSchema.pre("save", async function(next) {
+adminSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next();
-  const salt = await bcrypt.genSalt(10);
-  this.password = await bcrypt.hash(this.password, salt);
-  next();
+  try {
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+    next();
+  } catch (err) {
+    throw err;
+  }
 });
 
 const transactionSchema = new mongoose.Schema({
@@ -150,16 +155,64 @@ app.post('/api/v1/auth/register', async (req, res) => {
   try {
     const { firstName, lastName, email, contactNumber, password } = req.body;
 
-    const existingUser = await Auth.findOne({ email });
-    if (existingUser) return res.status(400).json({ message: 'Email is used already. Use another email for registration' });
+    // Add explicit validation
+    if (!firstName || !lastName || !email || !contactNumber || !password) {
+      return res.status(400).json({ 
+        message: 'All fields are required: firstName, lastName, email, contactNumber, password' 
+      });
+    }
 
-    const user = new Auth({ firstName, lastName, email, contactNumber, password });
+    if (password.length < 6) {
+      return res.status(400).json({ 
+        message: 'Password must be at least 6 characters long' 
+      });
+    }
+
+    // Check if email already exists
+    const existingUser = await Auth.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ 
+        message: 'Email is already registered. Please use another email.' 
+      });
+    }
+
+    // Create user
+    const user = new Auth({
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+      email: email.toLowerCase().trim(),
+      contactNumber: contactNumber.trim(),
+      password
+    });
+
     await user.save();
 
-    res.status(201).json({ message: 'You have been successfully registered, please wait for the admin approval' });
+    return res.status(201).json({ 
+      message: 'Registration successful! Please wait for admin approval.' 
+    });
+
   } catch (err) {
-    console.error('Registration error:', err);
-    res.status(400).json({ message: 'There was an error in registration' });
+    console.error('Registration error:', err); // This will show exact error in terminal
+
+    // Handle Mongoose validation errors properly
+    if (err.name === 'ValidationError') {
+      const errors = Object.values(err.errors).map(e => e.message);
+      return res.status(400).json({ 
+        message: 'Validation failed', 
+        errors 
+      });
+    }
+
+    if (err.code === 11000) { // Duplicate key error (email)
+      return res.status(400).json({ 
+        message: 'Email already exists. Please use a different email.' 
+      });
+    }
+
+    res.status(500).json({ 
+      message: 'Server error during registration',
+      error: err.message 
+    });
   } 
 });
 
