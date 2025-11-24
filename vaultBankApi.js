@@ -53,7 +53,7 @@ const authSchema = new mongoose.Schema({
   lastName: { type: String, required: true },
   email: { type: String, required: true, unique: true },
   contactNumber: { type: String, required: true },
-  password: { type: String, required: true,minlength: 6},
+  password: { type: String, required: true, minlength: 6},
 
   balance: { type: Number, default: 0 },
   status: { type: String, enum: ["pending", "approved", "rejected"], default: "pending"},
@@ -67,10 +67,14 @@ const authSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 authSchema.pre("save", async function(next) {
-  if (!this.isModified("password")) return next();
-  const salt = await bcrypt.genSalt(10);
-  this.password = await bcrypt.hash(this.password, salt);
-  next();
+ if (!this.isModified("password")) return next();
+  try {
+    const salt = await bcrypt.genSalt(10); 
+    this.password = await bcrypt.hash(this.password, salt); 
+    next(); 
+  } catch (err) {
+    next(err); 
+  }
 });
 
 authSchema.methods.comparePassword = async function(candidatePassword) {
@@ -154,6 +158,7 @@ app.post('/api/v1/auth/register', async (req, res) => {
 
     res.status(201).json({ message: 'You have been successfully registered, please wait for the admin approval' });
   } catch (err) {
+    console.error('Registration error:', err);
     res.status(400).json({ message: 'There was an error in registration' });
   } 
 });
@@ -249,7 +254,6 @@ app.get('/api/v1/auth/me', authMiddleware, async (req, res) => {
     if (!user) return res.status(404).json({ message: 'User not found' });
     res.json(user);
   } catch (err) {
-    console.error('Registration error:', err); 
     res.status(500).json({ message: "Internal Server Error" });
   }
 });
