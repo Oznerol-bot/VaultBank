@@ -211,6 +211,44 @@ app.post('/api/v1/auth/register', async (req, res) => {
   } 
 });
 
+app.post('/api/v1/admin/register', async (req, res) => {  
+  try {
+    const { username, email, password } = req.body;
+
+    if (!username || !email || !password) {
+      return res.status(400).json({ 
+        message: 'All fields are required: username, email, password' 
+      });
+    }
+    const existingAdmin = await Admin.findOne({ $or: [{ username }, { email }] });
+    if (existingAdmin) {
+      return res.status(400).json({ 
+        message: 'Username or Email is already registered.' 
+      });
+    }
+
+    const newAdmin = new Admin({
+      username: username.trim(),
+      email: email.toLowerCase().trim(),
+      password: password
+    });
+
+    await newAdmin.save();
+
+    return res.status(201).json({ 
+      message: 'Admin registration successful!', 
+      adminId: newAdmin._id 
+    });
+
+  } catch (err) {
+    console.error('Admin registration error:', err);
+    res.status(500).json({ 
+      message: 'Server error during admin registration',
+      error: err.message 
+    });
+  } 
+});
+
 app.post('/api/v1/admin/login', async (req, res) => {
   try {
     const { username, password } = req.body;
