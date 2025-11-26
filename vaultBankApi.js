@@ -300,6 +300,7 @@ app.post('/api/v1/auth/login', async (req, res) => {
 
     res.json({ message: '2FA code sent to email' });
   } catch (err) {
+    console.error("Nodemailer Error Details:", err);
     res.status(500).json({ message: "Internal Server Error" });
   }
 });
