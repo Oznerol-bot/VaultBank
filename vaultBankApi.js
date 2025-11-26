@@ -86,7 +86,7 @@ const adminSchema = new mongoose.Schema({
   username:  { type: String, required: true, unique: true },
   email:     { type: String, required: true, unique: true },
   password:  { type: String, required: true },
-  role:      { type: String, required: true, enum: ["admin"]}
+  role:      { type: String, required: true, enum: ["admin"], default: "admin"}
 }, { timestamps: true });
 
 adminSchema.pre("save", async function () { 
@@ -154,7 +154,6 @@ app.post('/api/v1/auth/register', async (req, res) => {
   try {
     const { firstName, lastName, email, contactNumber, password } = req.body;
 
-    // Add explicit validation
     if (!firstName || !lastName || !email || !contactNumber || !password) {
       return res.status(400).json({ 
         message: 'All fields are required: firstName, lastName, email, contactNumber, password' 
@@ -167,7 +166,6 @@ app.post('/api/v1/auth/register', async (req, res) => {
       });
     }
 
-    // Check if email already exists
     const existingUser = await Auth.findOne({ email });
     if (existingUser) {
       return res.status(400).json({ 
@@ -175,7 +173,6 @@ app.post('/api/v1/auth/register', async (req, res) => {
       });
     }
 
-    // Create user
     const user = new Auth({
       firstName: firstName.trim(),
       lastName: lastName.trim(),
@@ -191,9 +188,8 @@ app.post('/api/v1/auth/register', async (req, res) => {
     });
 
   } catch (err) {
-    console.error('Registration error:', err); // This will show exact error in terminal
+    console.error('Registration error:', err); 
 
-    // Handle Mongoose validation errors properly
     if (err.name === 'ValidationError') {
       const errors = Object.values(err.errors).map(e => e.message);
       return res.status(400).json({ 
@@ -245,7 +241,7 @@ app.post('/api/v1/auth/login', async (req, res) => {
 
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     user.twoFACode = code;
-    user.twoFAExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 min expiration
+    user.twoFAExpires = new Date(Date.now() + 10 * 60 * 1000); 
     await user.save();
 
 
