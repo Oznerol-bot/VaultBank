@@ -91,7 +91,6 @@ const adminSchema = new mongoose.Schema({
 
 adminSchema.pre("save", async function () { 
 
-
   if (!this.isModified("password")) return; 
   try {
     const salt = await bcrypt.genSalt(10);
