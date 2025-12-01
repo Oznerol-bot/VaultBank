@@ -54,7 +54,10 @@ const authSchema = new mongoose.Schema({
   password: { type: String, required: true, minlength: 6},
   username: { type: String, required: true, unique: true, trim: true, lowercase: true }, 
 
-  balance: { type: Number, default: 0 },
+ 
+  currentBalance: { type: Number, default: 500 }, 
+  savingsBalance: { type: Number, default: 500 }, 
+  investmentBalance: { type: Number, default: 500 }, 
   status: { type: String, enum: ["pending", "approved", "rejected"], default: "pending"},
   approvedAt: { type: Date },
   approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: "Admin" },
@@ -380,16 +383,17 @@ app.post('/api/v1/transactions/deposit', authMiddleware, async (req, res) => {
     const user = await Auth.findById(req.userId).session(session);
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    user.balance += amount;
+   
+    user.currentBalance += amount;
     await user.save({ session });
 
     const transaction = new Transaction({ 
-      userId: user._id, type: "deposit", amount, updatedBalance: user.balance 
+      userId: user._id, type: "deposit", amount, updatedBalance: user.currentBalance 
     });
     await transaction.save({ session });
 
     const transacReceipt = new Receipt({
-     transactionId: transaction._id, userId: user._id, type: "deposit", amount,updatedBalance: user.balance, receiptNumber: `R-${Date.now()}`
+     transactionId: transaction._id, userId: user._id, type: "deposit", amount,updatedBalance: user.currentBalance, receiptNumber: `R-${Date.now()}` 
     });
     await transacReceipt.save({ session });
 
@@ -398,7 +402,7 @@ app.post('/api/v1/transactions/deposit', authMiddleware, async (req, res) => {
 
     res.json({ 
       message: "You have deposited the amount successfully. Thank you for using Vault Bank", 
-      balance: user.balance, 
+      balance: user.currentBalance, 
       transaction 
     });   
 
@@ -419,18 +423,19 @@ app.post('/api/v1/transactions/withdraw', authMiddleware, async (req, res) => {
 
     const user = await Auth.findById(req.userId).session(session);
     if (!user) return res.status(404).json({ message: "User not registered within the system" });
-    if (user.balance < amount) return res.status(400).json({ message: "Insufficient balance" });
 
-    user.balance -= amount;
+    if (user.currentBalance < amount) return res.status(400).json({ message: "Insufficient balance" });
+
+    user.currentBalance -= amount;
     await user.save({ session });
 
     const transaction = new Transaction({
-      userId: user._id, type: "withdraw", amount, updatedBalance: user.balance
+      userId: user._id, type: "withdraw", amount, updatedBalance: user.currentBalance 
     });
     await transaction.save({ session });
 
     const transacReceipt = new Receipt({
-      transactionId: transaction._id, userId: user._id, type: "withdraw", amount, updatedBalance: user.balance, receiptNumber: `R-${Date.now()}`
+      transactionId: transaction._id, userId: user._id, type: "withdraw", amount, updatedBalance: user.currentBalance, receiptNumber: `R-${Date.now()}` 
     });
     await transacReceipt.save({ session });
 
@@ -439,7 +444,7 @@ app.post('/api/v1/transactions/withdraw', authMiddleware, async (req, res) => {
 
     res.json({ 
       message: "You have successfully withdrawn an amount. Thank you for using Vault Bank", 
-      balance: user.balance, 
+      balance: user.currentBalance, 
       transaction 
     });
 
@@ -462,16 +467,17 @@ app.post('/api/v1/transactions/transfer', authMiddleware, async (req, res) => {
     const receiver = await Auth.findOne({ email: toEmail }).session(session);
 
     if (!sender || !receiver) return res.status(404).json({ message: "User(s) not registered within the system" });
-    if (sender.balance < amount) return res.status(400).json({ message: "Insufficient balance" });
+    
+    if (sender.currentBalance < amount) return res.status(400).json({ message: "Insufficient balance" });
 
-    sender.balance -= amount;
-    receiver.balance += amount;
+    sender.currentBalance -= amount;
+    receiver.currentBalance += amount; // Assumption: Transfers are received into Current Balance
 
     await sender.save({ session });
     await receiver.save({ session });
 
     const transaction = new Transaction({
-      userId: sender._id, type: "transfer", amount, sender: sender._id, receiver: receiver._id, updatedBalance: sender.balance
+      userId: sender._id, type: "transfer", amount, sender: sender._id, receiver: receiver._id, updatedBalance: sender.currentBalance 
     });
     await transaction.save({ session });
 
@@ -486,8 +492,8 @@ app.post('/api/v1/transactions/transfer', authMiddleware, async (req, res) => {
 
     res.json({
       message: "Transfer is successful! Thank you for using Vault Bank",
-      senderBalance: sender.balance,
-      receiverBalance: receiver.balance,
+      senderBalance: sender.currentBalance, 
+      receiverBalance: receiver.currentBalance, 
       transaction
     });
 
@@ -777,10 +783,13 @@ app.get('/api/v1/reports/export', authMiddleware, async (req, res) => {
 
 app.get('/api/v1/dashboard/summary', authMiddleware, async (req, res) => {
   try {
-    const user = await Auth.findById(req.userId).select('firstName lastName email balance status');
+    // Select all three balance fields
+    const user = await Auth.findById(req.userId).select('firstName lastName email currentBalance savingsBalance investmentBalance status');
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
+
+    const totalBalance = user.currentBalance + user.savingsBalance + user.investmentBalance;
 
     const recentTransactions = await Transaction.find({ userId: req.userId })
       .sort({ createdAt: -1 }) 
@@ -811,7 +820,10 @@ app.get('/api/v1/dashboard/summary', authMiddleware, async (req, res) => {
         firstName: user.firstName,
         lastName: user.lastName,
         email: user.email,
-        balance: user.balance,
+        totalBalance: totalBalance,
+        currentBalance: user.currentBalance,
+        savingsBalance: user.savingsBalance,
+        investmentBalance: user.investmentBalance,
         status: user.status
       },
       recentTransactions: recentTransactions,
