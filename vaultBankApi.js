@@ -1,11 +1,9 @@
-
 require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const nodemailer = require('nodemailer');
 const PDFDocument = require('pdfkit');
 
 
@@ -59,12 +57,9 @@ const authSchema = new mongoose.Schema({
   status: { type: String, enum: ["pending", "approved", "rejected"], default: "pending"},
   approvedAt: { type: Date },
   approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: "Admin" },
-  rejectedAt: { type: Date },
+  rejectedAt: { type: Date }
 
-  twoFACode: { type: String },
-  twoFAExpires: { type: Date }
-
-}, { timestamps: true });
+}, { timestamps: true }); 
 
 authSchema.pre("save", async function () { 
 
@@ -276,62 +271,11 @@ app.post('/api/v1/auth/login', async (req, res) => {
     const isMatch = await user.comparePassword(password);
     if (!isMatch) return res.status(400).json({ message: 'Invalid credentials' });
 
-
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    user.twoFACode = code;
-    user.twoFAExpires = new Date(Date.now() + 10 * 60 * 1000); 
-    await user.save();
-
-
-    const transporter = nodemailer.createTransport({
-      host: 'smtp.gmail.com',
-      port: 587,      
-      secure: false,
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      },
-      tls: { 
-        rejectUnauthorized: false 
-      }
-    });
-
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to: user.email,
-      subject: 'Your 2FA Code.',
-      text: `Your 2FA code is: ${code} . Do not reply to this message as it is an automated response`
-    });
-
-    res.json({ message: '2FA code sent to email' });
-  } catch (err) {
-    console.error("Nodemailer Error Details:", err);
-    res.status(500).json({ message: "Internal Server Error" });
-  }
-});
-
-app.post('/api/v1/auth/verify-2fa', async (req, res) => {
-  try {
-    const { email, code } = req.body;
-
-    const user = await Auth.findOne({ email });
-    if (!user) return res.status(404).json({ message: 'User not found' });
-
-    if (!user.twoFACode || user.twoFAExpires < new Date()) {
-      return res.status(400).json({ message: '2FA code expired, please login again' });
-    }
-
-    if (user.twoFACode !== code) return res.status(400).json({ message: 'Invalid 2FA code' });
-
-
-    user.twoFACode = null;
-    user.twoFAExpires = null;
-    await user.save();
-
-
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
-    res.json({ token });
+    res.json({ token, message: 'Login successful' });
+
   } catch (err) {
+    console.error("Login Error Details:", err);
     res.status(500).json({ message: "Internal Server Error" });
   }
 });
@@ -342,7 +286,7 @@ app.post('/api/v1/auth/logout', authMiddleware, async (req, res) => {
 
 app.get('/api/v1/auth/me', authMiddleware, async (req, res) => {
   try {
-    const user = await Auth.findById(req.userId).select('-password -twoFACode -twoFAExpires');
+    const user = await Auth.findById(req.userId).select('-password');
     if (!user) return res.status(404).json({ message: 'User not found' });
     res.json(user);
   } catch (err) {
@@ -354,7 +298,7 @@ app.get('/api/v1/auth/me', authMiddleware, async (req, res) => {
 
 app.get('/api/v1/users', adminMiddleware, async (req, res) => {
   try {
-    const users = await Auth.find().select('-password -twoFACode -twoFAExpires').sort({ createdAt: -1 });
+    const users = await Auth.find().select('-password').sort({ createdAt: -1 });
     res.json(users);
   } catch (err) {
     res.status(500).json({ message: "Internal Server Error" });
@@ -363,7 +307,7 @@ app.get('/api/v1/users', adminMiddleware, async (req, res) => {
 
 app.get('/api/v1/users/:userId', adminMiddleware, async (req, res) => {
   try {
-    const user = await Auth.findById(req.params.userId).select('-password -twoFACode -twoFAExpires');
+    const user = await Auth.findById(req.params.userId).select('-password');
     if (!user) return res.status(404).json({ message: "User not found" });
     res.json(user);
   } catch (err) {
@@ -375,7 +319,7 @@ app.put('/api/v1/users/:userId', adminMiddleware, async (req, res) => {
   try {
     const updates = req.body;
     const user = await Auth.findByIdAndUpdate(req.params.userId, updates, { new: true })
-      .select('-password -twoFACode -twoFAExpires');
+      .select('-password');
     if (!user) return res.status(404).json({ message: "User not found" });
     res.json(user);
   } catch (err) {
