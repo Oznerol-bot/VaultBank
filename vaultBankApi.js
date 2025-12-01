@@ -796,7 +796,89 @@ app.get('/api/v1/reports/daily-summary', authMiddleware, async (req, res) => {
   }
 });
 
+app.get('/api/v1/reports/transactions-summary', authMiddleware, async (req, res) => {
+  try {
+    const userId = new mongoose.Types.ObjectId(req.userId);
+    
+    const senderSummary = await Transaction.aggregate([
+      { $match: { userId: userId } },
+      {
+        $group: {
+          _id: null,
+          totalDeposit: { $sum: { $cond: [{ $eq: ["$type", "deposit"] }, "$amount", 0] } },
+          totalWithdraw: { $sum: { $cond: [{ $eq: ["$type", "withdraw"] }, "$amount", 0] } },
+          totalTransferOut: { $sum: { $cond: [{ $eq: ["$type", "transfer"] }, "$amount", 0] } } 
+        }
+      }
+    ]);
+    
+    const receiverSummary = await Transaction.aggregate([
+      { $match: { receiver: userId, type: "transfer" } },
+      {
+        $group: {
+          _id: null,
+          totalTransferIn: { $sum: "$amount" }
+        }
+      }
+    ]);
 
+    const deposits = senderSummary[0] ? senderSummary[0].totalDeposit : 0;
+    const transfersIn = receiverSummary[0] ? receiverSummary[0].totalTransferIn : 0;
+    const withdrawals = senderSummary[0] ? senderSummary[0].totalWithdraw : 0;
+    const transfersOut = senderSummary[0] ? senderSummary[0].totalTransferOut : 0;
+
+    const totalIncome = deposits + transfersIn;
+ 
+    const totalExpenses = withdrawals + transfersOut;
+
+    const user = await Auth.findById(req.userId).select('currentBalance');
+    const netBalance = user ? user.currentBalance : 0;
+    
+    const rawTransactions = await Transaction.find({ 
+        $or: [
+            { userId: userId },
+            { receiver: userId, type: "transfer" } 
+        ]
+    })
+      .select('_id type amount createdAt sender receiver')
+      .sort({ createdAt: -1 });
+
+    const formattedTransactions = rawTransactions.map(tx => {
+        const isTransferOut = tx.type === 'transfer' && tx.sender && tx.sender.equals(userId);
+        const isTransferIn = tx.type === 'transfer' && tx.receiver && tx.receiver.equals(userId);
+        const isDeposit = tx.type === 'deposit';
+
+        let typeLabel = tx.type.charAt(0).toUpperCase() + tx.type.slice(1);
+        let isIncome = isDeposit || isTransferIn;
+        
+        if (isTransferOut) {
+            typeLabel = "Transfer (Out)";
+        } else if (isTransferIn) {
+            typeLabel = "Transfer (In)";
+        }
+        return {
+            transactionId: tx._id,
+            date: tx.createdAt.toISOString().substring(0, 10),
+            type: typeLabel,
+            amount: tx.amount,
+            isIncome: isIncome,
+        };
+    });
+
+    res.json({
+      summary: {
+        totalIncome: totalIncome,
+        totalExpenses: totalExpenses,
+        netBalance: netBalance,
+      },
+      transactions: formattedTransactions,
+    });
+
+  } catch (err) {
+    console.error('Transaction Summary Error:', err);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+});
 
 app.get('/api/v1/reports/export', authMiddleware, async (req, res) => {
   try {
