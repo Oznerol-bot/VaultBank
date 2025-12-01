@@ -305,6 +305,80 @@ app.get('/api/v1/auth/me', authMiddleware, async (req, res) => {
   }
 });
 
+app.put('/api/v1/auth/profile', authMiddleware, async (req, res) => {
+  try {
+    const { firstName, lastName, email, contactNumber } = req.body;
+    const updates = {};
+    if (firstName) updates.firstName = firstName.trim();
+    if (lastName) updates.lastName = lastName.trim();
+    if (contactNumber) updates.contactNumber = contactNumber.trim();
+    if (email) {
+        const trimmedEmail = email.toLowerCase().trim();
+        const existingUser = await Auth.findOne({ email: trimmedEmail, _id: { $ne: req.userId } });
+        if (existingUser) {
+            return res.status(400).json({ message: 'Email is already taken by another account.' });
+        }
+        updates.email = trimmedEmail;
+    }
+    
+    if (Object.keys(updates).length === 0) {
+        return res.status(400).json({ message: 'No valid fields provided for update.' });
+    }
+
+    const user = await Auth.findByIdAndUpdate(
+        req.userId, 
+        { $set: updates }, 
+        { new: true, runValidators: true }
+    ).select('-password');
+
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    
+    res.json({ 
+        message: 'Profile updated successfully', 
+        user 
+    });
+
+  } catch (err) {
+    console.error('Profile update error:', err);
+    if (err.name === 'ValidationError') {
+      const errors = Object.values(err.errors).map(e => e.message);
+      return res.status(400).json({ 
+        message: 'Validation failed', 
+        errors 
+      });
+    }
+    if (err.code === 11000) { 
+        return res.status(400).json({ 
+            message: 'A field you tried to update already exists (e.g., email or username).' 
+        });
+    }
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+app.patch('/api/v1/auth/change-password', authMiddleware, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ message: 'Current password and new password are required.' });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ message: 'New password must be at least 6 characters long.' });
+    }
+    const user = await Auth.findById(req.userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    const isMatch = await user.comparePassword(currentPassword);
+    if (!isMatch) return res.status(400).json({ message: 'Invalid current password.' });
+    user.password = newPassword;
+    await user.save(); 
+    res.json({ message: 'Password updated successfully. Please log in again with your new password.' });
+  } catch (err) {
+    console.error('Change password error:', err);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
 //++++++++ Admin Routes ++++++++
 
 app.get('/api/v1/users', adminMiddleware, async (req, res) => {
