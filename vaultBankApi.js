@@ -124,6 +124,7 @@ const ticketSchema = new mongoose.Schema({
   userId: {type: mongoose.Schema.Types.ObjectId, ref: "Auth", required: true },
   ticketSubject: {type: String, required: true},
   ticketDescription: {type: String, required: true},
+  relatedTransactionId: { type: String, trim: true, default: null },
   status: {type: String, enum: ["Open", "In_progress", "Resolved", "Closed"], default: "Open"}
 }, { timestamps: true });
 
@@ -571,10 +572,11 @@ app.get('/api/v1/tickets', authMiddleware, async (req, res) => {
 
 app.post('/api/v1/tickets', authMiddleware, async (req, res) => {
   try {
-    const { ticketSubject, ticketDescription } = req.body;
+    const { ticketSubject, ticketDescription, relatedTransactionId } = req.body;
     if (!ticketSubject || !ticketDescription) return res.status(400).json({ message: 'There is an incomplete input. PLease add the required inputs' });
 
-    const ticket = new Ticket({ userId: req.userId, ticketSubject, ticketDescription });
+    const ticket = new Ticket({ userId: req.userId, ticketSubject, ticketDescription, relatedTransactionId: relatedTransactionId || null 
+    });
     await ticket.save();
 
     res.status(201).json({ message: 'Support Ticket submitted successfully. PLease wait for an admin to resolve the issue', ticket });
@@ -783,7 +785,6 @@ app.get('/api/v1/reports/export', authMiddleware, async (req, res) => {
 
 app.get('/api/v1/dashboard/summary', authMiddleware, async (req, res) => {
   try {
-    // Select all three balance fields
     const user = await Auth.findById(req.userId).select('firstName lastName email currentBalance savingsBalance investmentBalance status');
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
