@@ -52,6 +52,7 @@ const authSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true },
   contactNumber: { type: String, required: true },
   password: { type: String, required: true, minlength: 6},
+  username: { type: String, required: true, unique: true, trim: true, lowercase: true }, 
 
   balance: { type: Number, default: 0 },
   status: { type: String, enum: ["pending", "approved", "rejected"], default: "pending"},
@@ -147,11 +148,10 @@ app.get('/', (req, res) => {
 
 app.post('/api/v1/auth/register', async (req, res) => {
   try {
-    const { firstName, lastName, email, contactNumber, password } = req.body;
-
-    if (!firstName || !lastName || !email || !contactNumber || !password) {
+    const { firstName, lastName, email, contactNumber, password, username } = req.body;
+    if (!firstName || !lastName || !email || !contactNumber || !password || !username) {
       return res.status(400).json({ 
-        message: 'All fields are required: firstName, lastName, email, contactNumber, password' 
+        message: 'All fields are required: firstName, lastName, email, contactNumber, password, username' 
       });
     }
 
@@ -161,10 +161,11 @@ app.post('/api/v1/auth/register', async (req, res) => {
       });
     }
 
-    const existingUser = await Auth.findOne({ email });
+    const existingUser = await Auth.findOne({ $or: [{ email }, { username }] });
     if (existingUser) {
+      const field = existingUser.email === email ? 'Email' : 'Username';
       return res.status(400).json({ 
-        message: 'Email is already registered. Please use another email.' 
+        message: `${field} is already registered. Please use another one.` 
       });
     }
 
@@ -173,6 +174,7 @@ app.post('/api/v1/auth/register', async (req, res) => {
       lastName: lastName.trim(),
       email: email.toLowerCase().trim(),
       contactNumber: contactNumber.trim(),
+      username: username.toLowerCase().trim(),
       password
     });
 
@@ -193,9 +195,9 @@ app.post('/api/v1/auth/register', async (req, res) => {
       });
     }
 
-    if (err.code === 11000) { // Duplicate key error (email)
+    if (err.code === 11000) { 
       return res.status(400).json({ 
-        message: 'Email already exists. Please use a different email.' 
+        message: 'Email or Username already exists. Please use a different one.' 
       });
     }
 
@@ -262,9 +264,14 @@ app.post('/api/v1/admin/login', async (req, res) => {
 
 app.post('/api/v1/auth/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { identifier, password } = req.body;
+    const user = await Auth.findOne({ 
+        $or: [
+            { email: identifier },
+            { username: identifier }
+        ]
+    });
 
-    const user = await Auth.findOne({ email });
     if (!user) return res.status(404).json({ message: 'User not found' });
     if (user.status !== 'approved') return res.status(403).json({ message: 'Account not approved' });
 
