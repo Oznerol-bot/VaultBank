@@ -706,7 +706,7 @@ app.get('/api/v1/tickets/:ticketId/replies', authMiddleware, async (req, res) =>
   }
 });
 
-// ++++++++ REPORTS ++++++++
+// ++++++++ Reports Routes ++++++++
 
 app.get('/api/v1/reports/transactions', authMiddleware, async (req, res) => {
   try {
@@ -819,6 +819,57 @@ app.get('/api/v1/reports/export', authMiddleware, async (req, res) => {
 
   } catch (err) {
     res.status(500).json({ message: "Internal Server Error" });
+  }
+});
+
+// ++++++++ Dashboard Routes ++++++++
+
+app.get('/api/v1/dashboard/summary', authMiddleware, async (req, res) => {
+  try {
+    const user = await Auth.findById(req.userId).select('firstName lastName email balance status');
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const recentTransactions = await Transaction.find({ userId: req.userId })
+      .sort({ createdAt: -1 }) 
+      .limit(5);
+
+    const summary = await Transaction.aggregate([
+      { $match: { userId: new mongoose.Types.ObjectId(req.userId) } },
+      {
+        $group: {
+          _id: "$type",
+          totalAmount: { $sum: "$amount" },
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+    
+
+    const transactionSummary = summary.reduce((acc, item) => {
+      acc[item._id] = item.totalAmount;
+      return acc;
+    }, { deposit: 0, withdraw: 0, transfer: 0 });
+
+
+    res.json({
+      message: 'Dashboard data fetched successfully',
+      user: {
+        id: user._id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        balance: user.balance,
+        status: user.status
+      },
+      recentTransactions: recentTransactions,
+      transactionSummary: transactionSummary
+    });
+
+  } catch (err) {
+    console.error('Dashboard summary error:', err);
+    res.status(500).json({ message: 'Internal Server Error', error: err.message });
   }
 });
 
