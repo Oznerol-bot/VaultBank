@@ -457,7 +457,7 @@ app.patch('/api/v1/users/:userId/reject', adminMiddleware, async (req, res) => {
     await user.save();
 
     await resend.emails.send({
-      from: 'Vault Bank <no-reply@onresend.com>',
+      from: 'no-reply@onresend.com',
       to: user.email,
       subject: 'Vault Bank Account Rejection',
       html: `
@@ -467,7 +467,7 @@ app.patch('/api/v1/users/:userId/reject', adminMiddleware, async (req, res) => {
       `
     });
 
-    res.json({ message: "User rejected successfully and email sent", user });
+    res.json({ message: "User rejected successfully and email", user });
   } catch (err) {
     res.status(500).json({ message: "Internal Server Error" });
   }
