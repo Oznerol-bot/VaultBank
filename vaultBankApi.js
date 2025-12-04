@@ -5,10 +5,12 @@ const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const PDFDocument = require('pdfkit');
+const { Resend } = require('resend');
 
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 // ====== Middleware ======
 app.use(cors());
@@ -423,8 +425,23 @@ app.patch('/api/v1/users/:userId/approve', adminMiddleware, async (req, res) => 
     user.approvedBy = req.userId;
     await user.save();
 
-    res.json({ message: "User approved successfully", user });
+    await resend.emails.send({
+      from: 'Vault Bank <no-reply@onresend.com>',  
+      to: user.email,
+      subject: 'Your Vault Bank Account Has Been Approved!',
+      html: `
+        <h2>Welcome to Vault Bank, ${user.firstName}!</h2>
+        <p>Your account has been <b>approved</b> by our admin team.</p>
+        <p>You can now log in and start using your banking dashboard.</p>
+        <br/>
+        <p>Thank you for registering with Vault Bank.</p>
+      `
+    });
+    
+
+    res.json({ message: "User approved successfully and email sent", user });
   } catch (err) {
+    console.error("Approval Error:", err);
     res.status(500).json({ message: "Internal Server Error" });
   }
 });
@@ -439,7 +456,18 @@ app.patch('/api/v1/users/:userId/reject', adminMiddleware, async (req, res) => {
     user.rejectedAt = new Date();
     await user.save();
 
-    res.json({ message: "User rejected successfully", user });
+    await resend.emails.send({
+      from: 'Vault Bank <no-reply@onresend.com>',
+      to: user.email,
+      subject: 'Vault Bank Account Rejection',
+      html: `
+      <h2>Hello ${user.firstName},</h2>
+      <p>Unfortunately, your account was <b>rejected</b>.</p>
+      <p>Please contact support if you think this is a mistake.</p>
+      `
+    });
+
+    res.json({ message: "User rejected successfully and email sent", user });
   } catch (err) {
     res.status(500).json({ message: "Internal Server Error" });
   }
