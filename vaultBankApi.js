@@ -457,7 +457,7 @@ app.patch('/api/v1/users/:userId/reject', adminMiddleware, async (req, res) => {
     await user.save();
 
     await resend.emails.send({
-      from: 'no-reply@onresend.com',
+      from: 'onboarding@resend.dev',
       to: user.email,
       subject: 'Vault Bank Account Rejection',
       html: `
